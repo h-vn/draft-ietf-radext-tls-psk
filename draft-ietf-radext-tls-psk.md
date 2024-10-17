@@ -1,7 +1,7 @@
 ---
 title: Operational Considerations for RADIUS and TLS-PSK
 abbrev: RADIUS and TLS-PSK
-docname: draft-ietf-radext-tls-psk-10
+docname: draft-ietf-radext-tls-psk-11
 
 stand_alone: true
 ipr: trust200902
