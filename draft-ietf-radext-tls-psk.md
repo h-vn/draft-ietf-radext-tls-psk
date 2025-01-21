@@ -20,8 +20,8 @@ author:
 
 - ins: A. DeKok
   name: Alan DeKok
-  org: FreeRADIUS
-  email: aland@freeradius.org
+  org: InkBridge Networks
+  email: alan.dekok@inkbridge.io
 
 normative:
   RFC6614:
@@ -44,7 +44,7 @@ informative:
 venue:
   group: RADEXT
   mail: radext@ietf.org
-  github: freeradius/radext-tls-psk.git
+  github: radext-wg/radext-tls-psk.git
 
 --- abstract
 
@@ -104,9 +104,7 @@ We first give requirements for creating and managing PSKs, followed by usability
 
 ### PSK Requirements
 
-Reuse of a PSK in multiple versions of TLS (e.g., TLS 1.2 and TLS 1.3) is considered unsafe ({{RFC8446, Section E.7}}).  Where TLS 1.3 binds the PSK to a particular key derivation function, TLS 1.2 does not.  This binding means that it is possible to use the same PSK in different hashes, leading to the potential for attacking the PSK by comparing the hash outputs.  While there are no known insecurities, these uses are not known to be secure, and should therefore be avoided.
-
-It may be tempting for servers to implement a "trust on first use" (TOFU) policy with respect to clients.  Such behavior is NOT RECOMMENDED.  When servers receive a connection from an unknown client, they SHOULD log the PSK identity, source IP address, and any other information which may be relevant.  An administrator can then later look at the logs and determine the appropriate action to take.
+Reuse of a PSK in multiple versions of TLS (e.g., TLS 1.2 and TLS 1.3) is considered unsafe ({{RFC8446, Section E.7}}).  Where TLS 1.3 binds the PSK to a particular key derivation function, TLS 1.2 does not.  This binding means that it is possible to use the same PSK in different hashes, leading to the potential for attacking the PSK by comparing the hash outputs.  While there are no known insecurities, these uses are not known to be secure, and should therefore be avoided.  For this reason, an implementation MUST NOT use the same PSK for TLS 1.3 and for earlier versions of TLS. The exact manner in which this requirement is enforced is implementation-specific. One possibility is to have two different PSKs. Another possibility is to forbid the use of TLS versions less than TLS 1.3
 
 {{RFC9258}} adds a key derivation function (KDF) to the import interface of (D)TLS 1.3, which binds the externally provided PSK to the protocol version.  That process is preferred to any TOFU mechanism.  In particular, that document:
 
@@ -124,6 +122,8 @@ Where user passwords are generally intended to be remembered and entered by peop
 
 We also incorporate by reference the requirements of {{RFC7360, Section 10.2}} when using PSKs.
 
+It may be tempting for servers to implement a "trust on first use" (TOFU) policy with respect to clients.  Such behavior is NOT RECOMMENDED.  When servers receive a connection from an unknown client, they SHOULD log the PSK identity, source IP address, and any other information which may be relevant.  An administrator can then later look at the logs and determine the appropriate action to take.
+
 ### Usability Guidance
 
 PSKs are in their purest form are opaque tokens, represented as an undistinguished series of octets.  Where PSKs are expected to be managed automatically by scripted methods, this format is acceptable.  However, in some cases it is necessary for administrators to share PSKs, in which case humanly readable formats may be useful.  Implementations SHOULD support entering PSKs as both binary data, and via a humanly readable form such as hex encoding.
@@ -132,7 +132,7 @@ Implementations SHOULD use a humanly readable form of PKSs for interfaces which 
 
 When using PSKs, administrators SHOULD use PSKs of at least 24 octets, generated using a source of cryptographically secure random numbers.  Implementers needing a secure random number generator should see {{RFC8937}} for for further guidance.  PSKs are not passwords, and administrators should not try to manually create PSKs.
 
-In order to guide implementors and adminis, we give an example commands below which generates random PSKs.  While some commands may not work on some systems one of the commands should succeed.  The intent here is to document a concise and simple example of creating PSKs which are both secure, and humanly manageable.  This document does not mandate that the PSKs follow this format, or any other format.
+In order to guide implementers and administrators, we give example commands below which generate random PSKs from a locally secure source.  While some commands may not work on some systems one of the commands should succeed.  The intent here is to document a concise and simple example of creating PSKs which are both secure, and humanly manageable.  This document does not mandate that the PSKs follow this format, or any other format.
 
 ~~~~
 openssl rand -base64 16
@@ -169,7 +169,7 @@ same value for PSK and shared secret.  To prevent administrative errors, impleme
 
 {{RFC4279, Section 5.1}} requires that PSK identities be encoded in UTF-8 format.  However, {{RFC8446, Section 4.2.11}} describes the "Pre-Shared Key Extension" and defines the ticket as an opaque string: "opaque identity<1..2^16-1>;".  This PSK is then used in {{RFC8446, Section 4.6.1}} for resumption.
 
-These definitions appear to be in conflict.  This conflict is addressed in {{RFC9257, Section 6.1.1}}, which discusses requirements for encoding and comparison of PSK identities.  Systems MUST follow the directions of {{RFC9257, Section 6.1.1}} when using or comparing PSK Identities for RADIUS/TLS.  mplementations MUST follow the recommendations of {{RFC8265}} for handling PSK Identity strings.
+These definitions appear to be in conflict.  This conflict is addressed in {{RFC9257, Section 6.1.1}}, which discusses requirements for encoding and comparison of PSK identities.  Systems MUST follow the directions of {{RFC9257, Section 6.1.1}} when using or comparing PSK Identities for RADIUS/TLS.  Implementations MUST follow the recommendations of {{RFC8265}} for handling PSK Identity strings.
 
 In general, implementers should allow for external PSK identities to follow {{RFC4279}} and be UTF-8, while PSK identities provisioned as part of resumption are automatically provisioned, and therefore follow {{RFC8446}}.
 
@@ -184,7 +184,7 @@ One approach could be to have externally provisioned PSK identities contain an N
 Servers MUST assign and/or track session resumption PSK identities in a
 way which facilities the ability to distinguish those identities from
 externally configured PSK identities, and which enables them to both find and validate
-the session resumption PSK.
+the session resumption PSK.  See {}(#resumption) below for more discussion of issues around resumption.
 
 A sample validation flow for TLS-PSK identities could be performed via the following steps:
 
@@ -224,13 +224,13 @@ The suggested validation rules for identities used outside of resumption are as 
 
 * Identities longer than a fixed maximum SHOULD be rejected.  The limit is implementation dependent, but SHOULD NOT be less than 128, and SHOULD NOT be more than 1024.  There is no purpose to allowing extremely long identities, and allowing them does little more than complicate implementations.
 
-* Identities SHOULD be in UTF-8 format.  Identities with embedded control characters, NUL octets, etc. SHOULD NOT be used.  This guidance is intended to both allow administators to recognize UTF-8 identities, and to allow implementations to more clearly distinguish TLS-PSK identities from TLS 1.3 resumption identities.  Allowing the two identifier spaces to overlap creates needless complexity and confusion.
+* Identities SHOULD be in UTF-8 format.  Identities with embedded control characters, NUL octets, etc. SHOULD NOT be used.  This guidance is intended to both allow administrators to recognize UTF-8 identities, and to allow implementations to more clearly distinguish TLS-PSK identities from TLS 1.3 resumption identities.  Allowing the two identifier spaces to overlap creates needless complexity and confusion.
 
 * Where the NAI format is expected, identities which are not in NAI format SHOULD be rejected, unless they are TLS 1.3 session identifies.  This rule allows implementations to more easily filter out unexpected or bad identities, and to close inappropriate TLS connections.
 
 It is RECOMMENDED that implementations extend these rules with any additional validation which are found to be useful.  For example, implementations and/or deployments could both generate PSK identities in a particular format for passing to client systems, and then also verify that any received identity matches that format.  For example, a site could generate PSK identities which are composed of characters in the local language.  The site could then reject identities which contain characters from other languages, even if those characters are valid UTF-8.
 
-The purpose of these rules is to help administators and implementors more easily manage systems using TLS-PSK, while also minimizing complexity and protecting from potential attackers traffic.  The rules follow a principle of "discard bad traffic quickly", which helps to improve system stability and performance.
+The purpose of these rules is to help administrators and implementers more easily manage systems using TLS-PSK, while also minimizing complexity and protecting from potential attackers traffic.  The rules follow a principle of "discard bad traffic quickly", which helps to improve system stability and performance.
 
 ## PSK and PSK Identity Sharing {#sharing}
 
@@ -242,7 +242,7 @@ Implementations SHOULD warn administrators if the same PSK identity and/or PSK i
 
 ## PSK Lifetimes
 
-Unfortunately, {{RFC9257}} offers no guidance on PSK lifetiems other than to note Section 4.2 that:
+Unfortunately, {{RFC9257}} offers no guidance on PSK lifetimes other than to note Section 4.2 that:
 
 > Forward security may be achieved by using a PSK-DH mode or by using PSKs with short lifetimes.
 
@@ -320,7 +320,7 @@ When TLS-PSK is used in an environment where both client and server are part of 
 
 If a client system is compromised, its complete configuration is exposed to the attacker.  Exposing a client certificate means that the attacker can pretend to be the client.  In contrast, exposing a PSK means that the attacker can not only pretend to be the client, but can also pretend to be the server.
 
-The main benefit of TLS-PSK, therefore, is that its operational processes are similar to that used for managing RADIUS/UDP, while gaining the increased security of TLS.   However, it is still beneficialy for servers to perform IP address filtering, in order to further limit their exposure to attacks.
+The main benefit of TLS-PSK, therefore, is that its operational processes are similar to that used for managing RADIUS/UDP, while gaining the increased security of TLS.   However, it is still beneficial for servers to perform IP address filtering, in order to further limit their exposure to attacks.
 
 ### IP Filtering
 
@@ -360,11 +360,13 @@ A client MUST use only one authentication method for TLS.  An authentication met
 
 That is, client configuration is relatively simple: use a particular set of credentials to authenticate to a particular server.  While clients may support multiple servers and fail-over or load-balancing, that configuration is generally orthogonal to the choice of which credentials to use.
 
-### Resumption
+### Resumption {#resumption}
 
-Implementations SHOULD support resumption.  In many cases session tickets can be authenticated solely by the server, and do not require querying a database.  The use of resumption can allow the system to better scale to higher loads.  There will also be systems which support both TLS-PSK and other TLS-based authentication methods such as certificates.  It is therefore vital for servers to be able to distinguish the use-case of TLS-PSK with pre-configured identities from TLS-PSK which is being used for resumptions.
+It is NOT RECOMMENDED that servers enable resumption for sessions which use TLS-PSK.  There are few practical benefits to supporting resumption, and many complexities.
 
-The above discussion of PSK identities is therefore complicated by the use of PSKs for resumption in TLS 1.3.  A server which receives a PSK identity via TLS typically cannot query the TLS layer to see if this identity is for a resumed session (which is possibly for another TLS authentication method), or is instead a static pre-provisioned identity.  This confusion complicates server implementations.
+However, some systems will need to support both TLS-PSK, and other TLS-based authentication methods such as certificates, while also supporting session resumption.  It is therefore vital for servers to be able to distinguish the use-case of TLS-PSK with pre-configured identities from TLS-PSK which is being used for resumptions.
+
+The above discussion of PSK identities is complicated by the use of PSKs for resumption in TLS 1.3.  A server which receives a PSK identity via TLS typically cannot query the TLS layer to see if this identity is for a resumed session (which is possibly for another TLS authentication method), or is instead a static pre-provisioned identity.  This confusion complicates server implementations.
 
 One way for a server to tell the difference between the two kinds of identities is via construction.  Identities used for resumption can be constructed via a fixed format, such as recommended by {{?RFC5077, Section 4}}.  A static pre-provisioned identity could be in format of an NAI, as given in {{RFC7542}}.  An implementation could therefore examine the incoming identity, and determine from the identity alone what kind of authentication was being performed.
 
@@ -376,7 +378,7 @@ Systems supporting TLS-PSK and resumption MUST cache data during the initial ful
 
 Information from the original TLS exchange (e.g., the original PSK identity) as well as related information (e.g., source IP addresses) may change between the initial full handshake and resumption. This change creates a "time-of-check time-of-use" (TOCTOU) security vulnerability. A malicious or compromised client could supply one set of data during the initial authentication, and a different set of data during resumption, potentially allowing them to obtain access that they should not have.
 
-If any authorization or policy decisions were made with information that has changed between the initial full handshake and resumption, and if change may lead to a different decision, such decisions MUST be reevaluated. It is RECOMMENDED that authorization and policy decisions are reevaluated based on the information given in the resumption. TLS-PSK servers MAY reject resumption where the information supplied during resumption does not match the information supplied during the original authentication. If a safe decision is not possible, TLS-PSK servers SHOULD reject the resumption and continue with a full handshake.
+If any authorization or policy decisions were made with information that has changed between the initial full handshake and resumption, and if change may lead to a different decision, such decisions MUST be reevaluated. It is RECOMMENDED that authorization and policy decisions are reevaluated based on the information given in the resumption. Servers MAY reject resumption where the information supplied during resumption does not match the information supplied during the original authentication. If a safe decision is not possible, Servers SHOULD reject the resumption and continue with a full handshake.
 
 ### Interaction with other TLS authentication methods
 
